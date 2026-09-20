@@ -1,0 +1,44 @@
+# 统一换行符规范
+# 作用：仓库内部统一存 LF，检出到各人机器时按平台自动处理，
+#      避免 "LF will be replaced by CRLF" 这类警告干扰判断。
+
+# 默认：文本文件自动识别并统一换行符
+* text=auto
+
+# 按用途明确指定
+*.sh    text eol=lf
+*.bash  text eol=lf
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.ps1   text eol=crlf
+
+# 代码与文档：统一 LF，避免跨平台 diff 噪声
+*.js    text eol=lf
+*.mjs   text eol=lf
+*.vue   text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.py    text eol=lf
+
+# 二进制文件：禁止任何换行符转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.webp  binary
+*.pdf   binary
+*.docx  binary
+*.doc   binary
+*.xlsx  binary
+*.ttf   binary
+*.woff  binary
+*.woff2  binary
+*.zip   binary
+
+# 生成物不参与 diff 展示，减少评审时的干扰
+package-lock.json  -diff
