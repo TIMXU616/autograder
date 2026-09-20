@@ -1,0 +1,68 @@
+/* 设计 Token：全局唯一的色值 / 字号 / 间距 / 圆角来源
+   规则：业务组件中禁止硬编码色值，一律引用 var(--ag-*) */
+
+:root {
+  /* 色彩 */
+  --ag-color-primary: #185fa5;
+  --ag-color-primary-weak: #e6f1fb;
+  --ag-color-primary-hover: #0c447c;
+  --ag-color-success: #3b6d11;
+  --ag-color-success-weak: #eaf3de;
+  --ag-color-warning: #ba7517;
+  --ag-color-warning-weak: #faeeda;
+  --ag-color-danger: #a32d2d;
+  --ag-color-danger-weak: #fcebeb;
+
+  --ag-color-text-primary: #2c2c2a;
+  --ag-color-text-secondary: #5f5e5a;
+  --ag-color-text-tertiary: #888780;
+
+  --ag-color-bg-page: #f4f6f8;
+  --ag-color-bg-card: #ffffff;
+  --ag-color-bg-hover: #f1efe8;
+  --ag-color-border: #e4e7ec;
+  --ag-color-border-strong: #d3d1c7;
+
+  /* 字号（配合 400 / 500 两档字重使用，不使用 600 以上） */
+  --ag-font-size-xs: 12px;
+  --ag-font-size-sm: 13px;
+  --ag-font-size-base: 14px;
+  --ag-font-size-lg: 16px;
+  --ag-font-size-xl: 20px;
+  --ag-font-size-display: 32px;
+  --ag-font-weight-normal: 400;
+  --ag-font-weight-medium: 500;
+  --ag-line-height: 1.6;
+
+  /* 间距 */
+  --ag-space-xs: 4px;
+  --ag-space-sm: 8px;
+  --ag-space-md: 12px;
+  --ag-space-lg: 16px;
+  --ag-space-xl: 24px;
+  --ag-space-2xl: 32px;
+
+  /* 圆角 */
+  --ag-radius-sm: 4px;
+  --ag-radius-md: 8px;
+  --ag-radius-lg: 12px;
+
+  /* 布局 */
+  --ag-sidebar-width: 208px;
+  --ag-header-height: 56px;
+
+  /* 对齐 Element Plus 主题变量，保证组件与自定义样式同色系 */
+  --el-color-primary: var(--ag-color-primary);
+  --el-color-primary-light-3: #378add;
+  --el-color-primary-light-5: #85b7eb;
+  --el-color-primary-light-7: #b5d4f4;
+  --el-color-primary-light-9: var(--ag-color-primary-weak);
+  --el-color-success: var(--ag-color-success);
+  --el-color-warning: var(--ag-color-warning);
+  --el-color-danger: var(--ag-color-danger);
+  --el-text-color-primary: var(--ag-color-text-primary);
+  --el-text-color-regular: var(--ag-color-text-secondary);
+  --el-border-color-lighter: var(--ag-color-border);
+  --el-border-radius-base: var(--ag-radius-md);
+  --el-font-size-base: var(--ag-font-size-base);
+}

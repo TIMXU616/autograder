@@ -1,0 +1,91 @@
+/* 全局基础样式与通用页面骨架类 */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-size: var(--ag-font-size-base);
+  line-height: var(--ag-line-height);
+  color: var(--ag-color-text-primary);
+  background: var(--ag-color-bg-page);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* 页面容器 */
+.ag-page {
+  padding: var(--ag-space-xl) var(--ag-space-2xl);
+}
+
+.ag-page-title {
+  margin: 0 0 var(--ag-space-xs);
+  font-size: var(--ag-font-size-xl);
+  font-weight: var(--ag-font-weight-medium);
+  color: var(--ag-color-text-primary);
+}
+
+.ag-page-desc {
+  margin: 0 0 var(--ag-space-xl);
+  font-size: var(--ag-font-size-sm);
+  color: var(--ag-color-text-secondary);
+}
+
+/* 卡片：统一圆角、描边、内间距 */
+.ag-card {
+  background: var(--ag-color-bg-card);
+  border: 1px solid var(--ag-color-border);
+  border-radius: var(--ag-radius-lg);
+  padding: var(--ag-space-xl);
+}
+
+.ag-card + .ag-card {
+  margin-top: var(--ag-space-lg);
+}
+
+.ag-card-title {
+  margin: 0 0 var(--ag-space-lg);
+  font-size: var(--ag-font-size-lg);
+  font-weight: var(--ag-font-weight-medium);
+}
+
+/* 文字层级 */
+.ag-text-secondary {
+  color: var(--ag-color-text-secondary);
+  font-size: var(--ag-font-size-sm);
+}
+
+.ag-text-tertiary {
+  color: var(--ag-color-text-tertiary);
+  font-size: var(--ag-font-size-xs);
+}
+
+/* 布局小工具 */
+.ag-row {
+  display: flex;
+  align-items: center;
+  gap: var(--ag-space-md);
+}
+
+.ag-row-between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ag-space-md);
+}
+
+.ag-mt-lg {
+  margin-top: var(--ag-space-lg);
+}
