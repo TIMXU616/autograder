@@ -89,3 +89,11 @@ a {
 .ag-mt-lg {
   margin-top: var(--ag-space-lg);
 }
+
+.ag-mb-lg {
+  margin-bottom: var(--ag-space-lg);
+}
+
+.ag-ml-sm {
+  margin-left: var(--ag-space-sm);
+}

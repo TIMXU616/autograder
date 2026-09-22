@@ -5,6 +5,10 @@
 
     <el-skeleton v-if="loading" :rows="6" animated />
 
+    <el-empty v-else-if="error" :description="error">
+      <el-button type="primary" @click="load">重新加载</el-button>
+    </el-empty>
+
     <el-empty v-else-if="!templates.length" description="暂无评分模板" />
 
     <div v-else class="template-grid">
@@ -34,24 +38,28 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { fetchTemplates } from '@/api'
 
 const router = useRouter()
 const loading = ref(true)
+const error = ref('')
 const templates = ref([])
 
-onMounted(async () => {
+async function load() {
+  loading.value = true
+  error.value = ''
   try {
     const res = await fetchTemplates()
-    templates.value = res.list
-  } catch (error) {
-    ElMessage.error(error.message)
+    templates.value = res.items ?? res.list ?? []
+  } catch (err) {
+    error.value = err.message
   } finally {
     loading.value = false
   }
-})
+}
+
+onMounted(load)
 </script>
 
 <style scoped>
