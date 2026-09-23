@@ -148,6 +148,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/reports/{report_id}/text:
+    get:
+      operationId: getReportText
+      summary: 报告解析后的正文与段落坐标
+      description: 结果页把 evidence 定位到原文段落并高亮。报告尚未解析完成时返回 HTTP 200 与业务码 4090。
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 正文与段落坐标；若尚未解析完成则返回业务错误体（code 4090）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ReportText"
+                  - $ref: "#/components/schemas/Error"
+        "404":
+          description: 报告不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/grades:
     get:
       operationId: listGrades
@@ -368,6 +394,34 @@ components:
           type: string
           format: date-time
           nullable: true
+    Paragraph:
+      type: object
+      required: [start, end, text]
+      properties:
+        start:
+          type: integer
+          description: 该段在 text 中的起始字符偏移，从 0 起，左闭
+        end:
+          type: integer
+          description: 结束字符偏移，右开
+        text:
+          type: string
+          description: 该段原文，满足 text[start:end] 与该段 text 逐字相等
+    ReportText:
+      type: object
+      required: [report_id, filename, text, paragraphs]
+      properties:
+        report_id:
+          type: string
+        filename:
+          type: string
+        text:
+          type: string
+          description: 解析后的完整正文，与评分时送入模型的正文一致
+        paragraphs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Paragraph"
     GradeListItem:
       type: object
       required: [report_id, filename, student, template_id, template_name, status, total_score, finished_at]
