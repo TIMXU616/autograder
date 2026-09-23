@@ -37,7 +37,7 @@ def create_app() -> FastAPI:
     recovered = grading_repo.mark_inflight_failed()
     if recovered:
         logging.getLogger(__name__).warning("启动恢复：%s 条 in-flight 报告已置 failed", recovered)
-    app = FastAPI(title="AutoGrader")
+    app = FastAPI(title="AutoGrader", version="1.0.0")
 
     @app.exception_handler(GradingError)
     def grading_error_handler(request: Request, exc: GradingError):

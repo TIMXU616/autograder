@@ -1,4 +1,4 @@
-"""报告相关路由：上传、触发评阅、查询结果。路由层只做参数校验与编排。"""
+"""报告相关路由：上传、触发评阅、查询结果、原文段落。路由层只做参数校验与编排。"""
 
 from fastapi import APIRouter, File, Form, UploadFile
 
@@ -24,3 +24,9 @@ def trigger_grading(report_id: str):
 def get_result(report_id: str):
     """查询评阅结果与状态机当前状态。"""
     return ctrl.get_result(report_id)
+
+
+@router.get("/api/v1/reports/{report_id}/text")
+def get_report_text(report_id: str):
+    """报告原文与段落坐标，供结果页把 evidence 定位到原文并高亮。"""
+    return ctrl.get_report_text(report_id)

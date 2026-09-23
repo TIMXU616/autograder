@@ -1,6 +1,7 @@
 """控制层：上传校验、评阅串行队列、状态机推进、结果组装。"""
 
 import hashlib
+import json
 import logging
 import queue
 import threading
@@ -8,10 +9,12 @@ import uuid
 from pathlib import Path
 
 from ..config import GLM_MODEL
+from ..constants import ERR_NO_TEXT_LAYER, PARSE_ERROR_CODES
 from ..errors import (
     DuplicateReportError,
     EmptyFileError,
     GradingError,
+    NotParsedError,
     TooLargeError,
     UnsupportedTypeError,
 )
@@ -120,6 +123,36 @@ def get_result(report_id: str) -> dict:
     }
 
 
+def get_report_text(report_id: str) -> dict:
+    """原文段落接口用：直接读落库的解析结果，不得每次请求重新解析文件。"""
+    report = grading_repo.get_report(report_id)  # 不存在抛 4042
+
+    if report["status"] in ("uploaded", "parsing"):
+        raise NotParsedError(report["status"])
+
+    if not report.get("parsed_text"):
+        # 解析阶段就失败的报告：回传其解析类错误码与文案，HTTP 200
+        code = None
+        message = "报告解析失败"
+        try:
+            result = grading_repo.get_result(report_id, 1)
+            code = result["error_code"]
+            if result["warnings"]:
+                message = result["warnings"][0]
+        except Exception:
+            pass
+        if code in PARSE_ERROR_CODES:
+            raise GradingError(code, message, http_status=200)
+        raise GradingError(ERR_NO_TEXT_LAYER, message, http_status=200)
+
+    return {
+        "report_id": report_id,
+        "filename": report["filename"],
+        "text": report["parsed_text"],
+        "paragraphs": json.loads(report["parsed_paragraphs"] or "[]"),
+    }
+
+
 def _process_report(report_id: str) -> None:
     """队列任务：解析 → 评分 → 入库，推进状态机。"""
     report = grading_repo.get_report(report_id)
@@ -134,6 +167,7 @@ def _process_report(report_id: str) -> None:
         _finish_failed(report_id, exc, started)
         return
 
+    grading_repo.save_parsed(report_id, parsed["text"], parsed["paragraphs"])
     grading_repo.update_report_status(report_id, "parsed")
     grading_repo.update_report_status(report_id, "grading")
 

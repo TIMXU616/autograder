@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS reports (
     file_sha256 TEXT NOT NULL,
     status TEXT NOT NULL,
     uploaded_at TEXT NOT NULL,
-    student TEXT
+    student TEXT,
+    parsed_text TEXT,
+    parsed_paragraphs TEXT
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_sha_template
@@ -65,10 +67,11 @@ def init_db() -> None:
             except sqlite3.OperationalError:
                 pass  # 列已存在，跳过
         # 兼容已存在的旧表：reports 补 student 列
-        try:
-            conn.execute("ALTER TABLE reports ADD COLUMN student TEXT")
-        except sqlite3.OperationalError:
-            pass  # 列已存在，跳过
+        for col in ("student", "parsed_text", "parsed_paragraphs"):
+            try:
+                conn.execute(f"ALTER TABLE reports ADD COLUMN {col} TEXT")
+            except sqlite3.OperationalError:
+                pass  # 列已存在，跳过
         conn.commit()
     finally:
         conn.close()

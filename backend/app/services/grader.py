@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from ..errors import InvalidJsonError
-from .llm_client import LLMClient
+from .llm_client import LLMClient, MOCK_REASON_PREFIX, MOCK_WARNING
 from .prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -136,6 +136,11 @@ def _normalize(data: dict, report_text: str) -> dict:
     s = round(sum(i.get("score") or 0.0 for i in items), 1)
     if not offtopic_hit and abs(float(data.get("total_score") or 0.0) - s) > 0.01:
         warnings.append("total_score 与各项之和不等，已按各项之和重算")
+
+    # mock 自曝（P2-09）：有模拟项时，保证固定警示串存在且只出现一次；真模型路径不受影响
+    if any(str(it.get("reason") or "").startswith(MOCK_REASON_PREFIX) for it in items):
+        warnings = [w for w in warnings if w != MOCK_WARNING]
+        warnings.insert(0, MOCK_WARNING)
 
     return {
         "items": items,

@@ -233,3 +233,16 @@ def find_report_by_key(file_sha256, template_id):
     finally:
         conn.close()
     return dict(row) if row else None
+
+
+def save_parsed(report_id, text: str, paragraphs: list) -> None:
+    """解析成功后落库正文与段落坐标，供 /text 接口直接读取，不二次解析。"""
+    conn = get_conn()
+    try:
+        conn.execute(
+            "UPDATE reports SET parsed_text = ?, parsed_paragraphs = ? WHERE report_id = ?",
+            (text, json.dumps(paragraphs, ensure_ascii=False), report_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
