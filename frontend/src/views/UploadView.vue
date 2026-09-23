@@ -68,10 +68,27 @@
         </span>
       </div>
 
-      <div v-if="submitting" class="ag-progress">
-        <el-progress :percentage="progress" :stroke-width="10" striped />
-        <p class="ag-text-secondary">{{ stageText }}</p>
+      <div v-if="submitting || failure" class="ag-progress">
+        <el-progress
+          :percentage="progress"
+          :stroke-width="10"
+          :status="failure ? 'exception' : undefined"
+          :striped="!failure"
+          :show-text="!failure"
+        />
+        <p class="ag-text-secondary">{{ failure ? '评阅未完成' : stageText }}</p>
       </div>
+
+      <!-- 失败常驻提示：归类 + 错误码 + 可执行的下一步（契约要求，不用 ElMessage 一闪而过） -->
+      <el-alert v-if="failure" type="error" :closable="false" show-icon class="ag-mt-lg">
+        <template #title>
+          {{ failure.kind_text }}<template v-if="failure.code">（错误码 {{ failure.code }}）</template>
+        </template>
+        <span class="failure-msg">{{ failure.message }}</span>
+        <el-button size="small" type="primary" plain class="ag-mt-sm" @click="resetFailure">
+          重新上传
+        </el-button>
+      </el-alert>
     </div>
 
     <div class="ag-card">
@@ -103,13 +120,18 @@ const file = ref(null)
 const submitting = ref(false)
 const progress = ref(0)
 const stageText = ref('')
+/* 常驻失败态：{ code, kind, kind_text, message }
+   用 el-alert 常驻展示，而不是 ElMessage 一闪而过 —— 契约要求失败时给出
+   「错误码 + 下一步动作」，闪一下用户来不及看清也没法照着做。 */
+const failure = ref(null)
 
 const MAX_SIZE = 20 * 1024 * 1024
 const ALLOW_EXT = ['docx', 'pdf']
 
-/* 契约没有 progress 字段，进度按状态机的阶段换算（契约第 3 节）。
-   百分比口径与页面文案已与 A / LearnBuddy 对齐：30 / 50 / 65 / 85 → 终态 100 */
-const STAGE_PERCENT = { uploaded: 30, parsing: 50, parsed: 65, grading: 85 }
+/* 契约没有 progress 字段，进度按状态机的阶段换算。
+   口径直接取契约第 4 节的建议值：uploaded 10 / parsing 30 / parsed 50 / grading 80，
+   终态 100，失败转错误态（原先代码里的 30/50/65/85 契约里没有，已按契约统一）。 */
+const STAGE_PERCENT = { uploaded: 10, parsing: 30, parsed: 50, grading: 80 }
 
 const currentTemplate = computed(
   () => templates.value.find((item) => item.template_id === templateId.value) || null
@@ -171,9 +193,24 @@ function handleRemove() {
   file.value = null
 }
 
-/* 契约 7.2 → 7.3 → 7.4：上传只落库，另需触发评阅，再轮询结果 */
+/* 「重新上传」：清掉常驻错误与进度，回到可选文件的状态 */
+function resetFailure() {
+  failure.value = null
+  progress.value = 0
+  stageText.value = ''
+  uploadRef.value?.clearFiles()
+  file.value = null
+}
+
+/* 契约 7.2 → 7.3 → 7.4：上传只落库，另需触发评阅，再轮询结果
+   失败分三类处理（卡片1）：
+     · 文件/参数问题（4001/4002/4004/4041/4091）+ 网络问题（3001/3002）
+       → 发生在上传或触发阶段，留在本页常驻展示，给「重新上传」
+     · 服务端问题（4003/4005/5001–5005）→ 契约规定为 HTTP 200 + 任务置 failed，
+       只在轮询到 status==='failed' 时才读得到，交结果页常驻展示 */
 async function handleSubmit() {
   if (!canSubmit.value) return
+  failure.value = null
   submitting.value = true
   progress.value = 8
   stageText.value = '正在上传报告…'
@@ -191,7 +228,7 @@ async function handleSubmit() {
       onStage: (r) => {
         stageText.value = r.stage_text || '正在评阅…'
         /* 终态（success / partial_success / failed）统一推到 100%，
-           否则进度条会停在 grading 的 85% 上不动 */
+           否则进度条会停在 grading 的 80% 上不动 */
         progress.value = r.in_flight ? (STAGE_PERCENT[r.status] ?? progress.value) : 100
       },
       interval: 2000
@@ -211,15 +248,25 @@ async function handleSubmit() {
     if (reportId) {
       ElMessage.warning(`${error.message}（已为你打开该报告的结果页）`)
       router.push(`/result/${reportId}`)
-    } else {
-      ElMessage.error(error.message)
+      return
     }
+    /* 上传/触发阶段的同步错误：留在本页常驻展示错误码与归类，进度条转错误态 */
+    failure.value = {
+      code: error.code ?? null,
+      kind: error.kind ?? 'server',
+      kind_text: error.kind_text ?? '请求失败',
+      message: error.message
+    }
+    progress.value = 100
   } finally {
     submitting.value = false
-    progress.value = 0
-    stageText.value = ''
-    uploadRef.value?.clearFiles()
-    file.value = null
+    /* 失败时保留进度条（错误态）与所选文件，用户可以直接点「重新上传」重试 */
+    if (!failure.value) {
+      progress.value = 0
+      stageText.value = ''
+      uploadRef.value?.clearFiles()
+      file.value = null
+    }
   }
 }
 </script>
@@ -249,5 +296,10 @@ async function handleSubmit() {
 
 .ag-progress p {
   margin: var(--ag-space-sm) 0 0;
+}
+
+.failure-msg {
+  display: block;
+  margin: 0 0 var(--ag-space-sm);
 }
 </style>

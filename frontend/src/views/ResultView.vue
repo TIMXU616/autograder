@@ -125,9 +125,14 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="原文依据" min-width="230">
+          <el-table-column label="原文依据" min-width="270">
             <template #default="{ row }">
-              <span v-if="row.evidence" class="evidence">“{{ row.evidence }}”</span>
+              <template v-if="row.evidence">
+                <span class="evidence">“{{ row.evidence }}”</span>
+                <el-button link type="primary" size="small" @click="openSource(row)">
+                  查看原文
+                </el-button>
+              </template>
               <span v-else class="ag-text-tertiary">未命中原文，未采信</span>
             </template>
           </el-table-column>
@@ -166,15 +171,55 @@
           </div>
         </div>
       </div>
+
+      <!-- 原文依据抽屉：点「查看原文」才按需拉取，/text 未上线/报告未解析完都不报错 -->
+      <el-drawer v-model="drawer.visible" title="原文依据核查" size="520px">
+        <div v-if="drawer.loading" class="ag-text-secondary">正在读取报告原文…</div>
+
+        <template v-else>
+          <p class="drawer-title">{{ drawer.item?.name }}</p>
+
+          <!-- 接口不可用 / 报告还没解析完：如实说明，不假装成功 -->
+          <el-alert
+            v-if="drawer.mode === 'unavailable'"
+            type="info"
+            :closable="false"
+            show-icon
+            :title="drawer.message"
+          />
+
+          <template v-else>
+            <div class="drawer-block">
+              <p class="ag-text-secondary">本项引用的原文片段</p>
+              <blockquote class="drawer-quote">“{{ drawer.item?.evidence }}”</blockquote>
+            </div>
+
+            <div class="drawer-block">
+              <p class="ag-text-secondary">在报告正文中的位置</p>
+              <p v-if="drawer.mode === 'located'" class="drawer-text">
+                …{{ parts.before }}<mark class="drawer-hit">{{ parts.hit }}</mark>{{ parts.after }}…
+              </p>
+              <p v-else class="ag-text-tertiary">
+                未能在当前正文中定位到该片段（多为换行/空格差异导致）。上方引文仍以后端返回为准。
+              </p>
+            </div>
+          </template>
+        </template>
+      </el-drawer>
     </template>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, CircleCheck, Star } from '@element-plus/icons-vue'
-import { fetchReportResult, waitForResult } from '@/api'
+import {
+  fetchReportResult,
+  waitForResult,
+  fetchReportText,
+  evidenceContext
+} from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -182,6 +227,64 @@ const router = useRouter()
 const loading = ref(true)
 const error = ref('')
 const result = ref(null)
+
+/* ---------- 原文依据抽屉 ----------
+   /text 有三种「还没好」的情形必须分开处理（见 api/index.js fetchReportText）：
+     · 路由未注册   → 框架级 404，响应体没有业务 code
+     · 报告还在解析 → HTTP 200 + code 4090（axios 判成功，不能直接当有原文渲染）
+     · 解析失败     → HTTP 200 + code 4003 / 4005
+   任何一种都不能当成「有原文」，否则抽屉里会出现空对象。 */
+const drawer = reactive({
+  visible: false,
+  loading: false,
+  item: null,
+  mode: '', // located（已定位）| not-found（拉到正文但没匹配上）| unavailable（接口/报告不可用）
+  message: '',
+  snippet: '',
+  hit: ''
+})
+const sourceText = ref('')
+
+/* 把上下文片段按命中位置切三段，中间那段加高亮 */
+const parts = computed(() => {
+  const { snippet, hit } = drawer
+  if (!snippet || !hit) return { before: snippet, hit: '', after: '' }
+  const at = snippet.indexOf(hit)
+  if (at < 0) return { before: snippet, hit: '', after: '' }
+  return { before: snippet.slice(0, at), hit, after: snippet.slice(at + hit.length) }
+})
+
+/* 点「查看原文」才拉接口 —— 不做进页面就预加载（现在必 404，会平白报错） */
+async function openSource(row) {
+  drawer.visible = true
+  drawer.item = row
+  drawer.mode = ''
+  drawer.message = ''
+  drawer.snippet = ''
+  drawer.hit = ''
+
+  /* 报告正文只拉一次，多个评分项共用 */
+  if (!sourceText.value) {
+    drawer.loading = true
+    const res = await fetchReportText(route.params.id)
+    drawer.loading = false
+    if (!res.ok) {
+      drawer.mode = 'unavailable'
+      drawer.message = res.message
+      return
+    }
+    sourceText.value = res.text
+  }
+
+  const ctx = evidenceContext(sourceText.value, row.evidence)
+  if (ctx) {
+    drawer.mode = 'located'
+    drawer.snippet = ctx.snippet
+    drawer.hit = sourceText.value.slice(ctx.hit_start, ctx.hit_end)
+  } else {
+    drawer.mode = 'not-found'
+  }
+}
 
 const scoreColor = computed(() => {
   const rate = result.value?.score_rate ?? 0
@@ -278,6 +381,47 @@ onMounted(load)
 .evidence {
   color: var(--ag-color-text-secondary);
   font-size: var(--ag-font-size-sm);
+}
+
+.drawer-title {
+  margin: 0 0 var(--ag-space-lg);
+  font-weight: var(--ag-font-weight-medium);
+}
+
+.drawer-block {
+  margin-bottom: var(--ag-space-xl);
+}
+
+.drawer-block > p {
+  margin: 0 0 var(--ag-space-sm);
+}
+
+.drawer-quote {
+  margin: 0;
+  padding: var(--ag-space-sm) var(--ag-space-md);
+  border-left: 3px solid var(--ag-color-primary);
+  background: var(--ag-color-primary-weak);
+  border-radius: var(--ag-radius-md);
+  color: var(--ag-color-text-secondary);
+  font-size: var(--ag-font-size-sm);
+}
+
+.drawer-text {
+  margin: 0;
+  padding: var(--ag-space-md);
+  background: var(--ag-color-bg-hover);
+  border-radius: var(--ag-radius-md);
+  line-height: 1.9;
+  font-size: var(--ag-font-size-sm);
+  word-break: break-word;
+}
+
+.drawer-hit {
+  background: var(--ag-color-warning-weak);
+  color: var(--ag-color-warning);
+  font-weight: var(--ag-font-weight-medium);
+  padding: 0 2px;
+  border-radius: 2px;
 }
 
 .warn-list {

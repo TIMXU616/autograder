@@ -51,12 +51,47 @@ const ERROR_TEXT = {
   5005: '排队超时，请稍后重试',
   4041: '评分点模板不存在',
   4042: '报告不存在',
+  4090: '报告正在解析，请稍候',
   4091: '该报告已存在或已完成评阅'
+}
+
+/* 错误归类（卡片1 要求「失败分三类」）：
+     file    —— 文件或参数本身的问题，用户换文件 / 改参数即可解决
+     network —— 连不上后端，环境问题，提示"后端服务是否已启动"
+     server  —— 服务端处理失败（解析 / 模型 / 排队），只能重试，页面给「重新上传」
+
+   注意 4003 / 4005 / 5001–5005 不会出现在上传响应里：契约规定它们是
+   HTTP 200 + 任务置 failed，只能在轮询到 status==='failed' 时从 error_code 读到。 */
+const ERROR_KIND = {
+  3001: 'network',
+  3002: 'network',
+  4001: 'file',
+  4002: 'file',
+  4004: 'file',
+  4041: 'file',
+  4091: 'file',
+  4003: 'server',
+  4005: 'server',
+  4042: 'server',
+  4090: 'server',
+  5001: 'server',
+  5002: 'server',
+  5003: 'server',
+  5004: 'server',
+  5005: 'server'
+}
+
+const KIND_TEXT = {
+  file: '文件或参数问题',
+  network: '网络问题',
+  server: '服务端问题'
 }
 
 function fail(code, message, detail) {
   const err = new Error(message)
   err.code = code
+  err.kind = ERROR_KIND[code] ?? 'server'
+  err.kind_text = KIND_TEXT[err.kind]
   err.detail = detail ?? null
   return err
 }
@@ -251,6 +286,9 @@ function adaptResult(r, templateMap) {
     consistency: r.consistency ?? null,
     error_code: r.error_code ?? null,
     error_text: r.error_code ? ERROR_TEXT[r.error_code] ?? '' : '',
+    /* 轮询到 failed 时，页面靠这两个字段决定给「换文件」还是「重新上传」 */
+    error_kind: r.error_code ? ERROR_KIND[r.error_code] ?? 'server' : null,
+    error_kind_text: r.error_code ? KIND_TEXT[ERROR_KIND[r.error_code] ?? 'server'] : '',
     model: r.model,
     attempt_no: r.attempt_no,
     created_at: fmtTime(r.finished_at || r.grading_started_at),
@@ -398,4 +436,84 @@ export async function fetchReports({ page = 1, size = 5, keyword = '', templateI
     params: { page, page_size: size, template_id: templateId || undefined, order, keyword: keyword || undefined }
   })
   return { total: res.total, list: res.items.map((row) => adaptGradeRow(row, templateMap)) }
+}
+
+/* ⑥ 报告原文与段落坐标（契约 7.6，增补接口，A 排期 2026-09-24 上线）
+
+   ★ 三件"还没好"的事必须能区分，不能都当成功去渲染：
+     a. 路由未注册     → 框架级 404，响应体 {"detail":"Not Found"}，**没有业务 code**
+     b. 报告还在解析   → HTTP 200 + {"code":4090}（axios 判成功，必须自己看 body.code）
+     c. 解析失败       → HTTP 200 + {"code":4003 / 4005}
+   所以本函数返回统一形状 {ok, ...}，由页面决定降级展示，**自身不抛错**。 */
+export async function fetchReportText(reportId) {
+  if (USE_MOCK) return { ok: false, code: null, kind: 'server', message: 'Mock 模式下不提供原文定位' }
+  try {
+    const body = await http.get(`/reports/${reportId}/text`)
+    /* 业务码走 HTTP 200 返回：axios 当成功，需自己判 body.code */
+    if (body && typeof body.code === 'number') {
+      return {
+        ok: false,
+        code: body.code,
+        kind: ERROR_KIND[body.code] ?? 'server',
+        message: ERROR_TEXT[body.code] ?? body.message ?? '原文暂不可用'
+      }
+    }
+    return {
+      ok: true,
+      filename: body.filename,
+      text: body.text ?? '',
+      paragraphs: body.paragraphs ?? []
+    }
+  } catch (error) {
+    /* code=404 → 框架级 404（路由不存在）；code=4042 → 业务「报告不存在」 */
+    return {
+      ok: false,
+      code: error.code,
+      kind: error.kind,
+      message: error.code === 404
+        ? '原文定位接口尚未上线（计划 9/24 上线）'
+        : error.message
+    }
+  }
+}
+
+/* evidence → 原文偏移。容错顺序（实战必用，因为后端证据闸门是「去空白后」比对）：
+     1) 原样 indexOf
+     2) 失败 → 去掉所有空白后再匹配，再把归一化下标映射回原串下标
+     3) 仍失败 → 返回 -1，由页面降级成「只显示引文」，绝不报错、绝不清空 */
+const WS_RE = /\s+/g
+const NON_WS_RE = /\S/
+
+export function locateEvidence(text, evidence) {
+  if (!text || !evidence) return -1
+  const direct = text.indexOf(evidence)
+  if (direct >= 0) return direct
+
+  const compactText = text.replace(WS_RE, '')
+  const compactEv = evidence.replace(WS_RE, '')
+  if (!compactEv) return -1
+  const at = compactText.indexOf(compactEv)
+  if (at < 0) return -1
+
+  let seen = 0
+  for (let i = 0; i < text.length; i++) {
+    if (NON_WS_RE.test(text[i])) {
+      if (seen === at) return i
+      seen += 1
+    }
+  }
+  return -1
+}
+
+/* 取 evidence 在原文中的上下文片段，供「查看原文」抽屉展示 */
+export function evidenceContext(text, evidence, span = 120) {
+  const idx = locateEvidence(text, evidence)
+  if (idx < 0) return null
+  return {
+    start: Math.max(0, idx - span),
+    end: Math.min(text.length, idx + evidence.length + span),
+    hit_start: idx,
+    hit_end: idx + evidence.length,
+    snippet: text.slice(Math.max(0, idx - span), Math.min(text.length, idx + evidence.length + span))
+  }
 }
