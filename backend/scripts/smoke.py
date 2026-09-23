@@ -16,7 +16,7 @@ import httpx
 BASE = "http://127.0.0.1:8000"
 TERMINAL = ("success", "partial_success", "failed")
 DEFAULT_DOCX = (
-    Path(__file__).resolve().parent.parent.parent / "data" / "samples" / "case_good.docx"
+    Path(__file__).resolve().parent.parent / "samples" / "单链表实验报告_张三.docx"
 )
 
 
