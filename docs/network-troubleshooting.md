@@ -133,3 +133,87 @@ git push gitee dev    # 推 Gitee（GitHub 挂了就靠它）
 网络问题只影响"寄出去"这一步，本地随时可以再推。
 
 只要看到 `git status -sb` 显示 `[ahead N]`，就意味着**东西都在，只差一次成功的 push**。
+
+---
+
+## 八、新故障形态（2026-09-23 实测）：DNS 把 github.com 指到了不通的 IP
+
+### 症状
+
+```
+fatal: unable to access 'https://github.com/TIMXU616/autograder.git/':
+Failed to connect to github.com port 443 after 21083 ms: Could not connect to server
+```
+
+注意和第 6 节表格里的 `Connection was reset` **不是一回事**：
+这次是**连都连不上**（超时），不是连上后被掐。
+
+### 实测数据（本机，直连绕过沙箱代理）
+
+| 目标 | 结果 |
+|---|---|
+| `github.com` → DNS 解析出的 `20.205.243.166` | **不通**（连续 6 次探测全超时，0/6） |
+| `github.com` → 手工换成 `140.82.112.3` | **HTTP 401** ✅（401 = 通了，只是要认证） |
+| `github.com` → 手工换成 `140.82.121.4` | **HTTP 401** ✅ |
+| `github.com` → 手工换成 `140.82.113.3` | 不通 |
+| `api.github.com` / `codeload.github.com` | 可达 |
+| `raw.githubusercontent.com` / `objects.githubusercontent.com` | 可达 |
+| `ssh.github.com:443` / `github.com:22` | 可达 |
+| `gitee.com:443` | 可达（HTTP 200） |
+
+**结论：不是 GitHub 挂了，也不是凭据坏了 —— 是本机 DNS 把 `github.com`
+解析到了一个当前不通的 IP。GitHub 的其他 IP 完全可用。**
+
+### 修法：改 hosts，把 github.com 钉到可用 IP
+
+**1. 以管理员身份**打开记事本（开始菜单 → 右键「记事本」→ 以管理员身份运行）……
+
+或直接用管理员 PowerShell 一行搞定：
+
+```powershell
+Add-Content -Path "$env:windir\System32\drivers\etc\hosts" -Value "140.82.112.3  github.com" -Encoding ASCII
+ipconfig /flushdns
+```
+
+**2. 验证**（在 Git Bash 里跑，期望输出 `401`）：
+
+```bash
+curl --noproxy '*' -o /dev/null -w '%{http_code}\n' \
+  "https://github.com/TIMXU616/autograder.git/info/refs?service=git-upload-pack"
+```
+
+**3. 推送**：
+
+```bash
+cd /d/projects/autograder
+git push origin dev
+```
+
+> 该 IP 失效时换 `140.82.121.4`（同样实测 401）。GitHub 的边缘 IP 会变，
+> 但换了照样能通，改 hosts 前先用上面的 `curl --resolve` 试一下哪个通：
+> ```bash
+> for ip in 140.82.112.3 140.82.121.4 140.82.113.3; do
+>   printf "%-16s " "$ip"
+>   curl -s --noproxy '*' --resolve "github.com:443:$ip" -o /dev/null \
+>     -w '%{http_code}\n' -m 12 \
+>     "https://github.com/TIMXU616/autograder.git/info/refs?service=git-upload-pack"
+> done
+> ```
+>
+> 撤销也很简单：把 hosts 里那一行删掉即可。
+
+### 拿不到管理员权限时：走 Gitee 镜像
+
+`gitee.com` 实测通畅（HTTP 200），网页也能打开。按第 5 节建仓库后：
+
+```bash
+git remote add gitee https://gitee.com/你的用户名/autograder.git
+git push -u gitee dev
+```
+
+### 别把「直连」和「走代理」混起来测
+
+本机存在 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量（沙箱代理）。用 `curl` 测 GitHub 时
+**必须加 `--noproxy '*'`**，否则请求会走代理、`--resolve` 指定 IP 也不生效，
+测出来的 `000` 是代理的失败，不是你网络的真实现象。
+
