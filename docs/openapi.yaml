@@ -1,0 +1,461 @@
+openapi: 3.0.3
+info:
+  title: AutoGrader API
+  version: 1.0.0
+  description: 实验报告智能评阅教学平台接口。后端 FastAPI + SQLite，无登录、单教师角色。
+servers:
+  - url: http://localhost:8000
+paths:
+  /api/v1/templates:
+    get:
+      operationId: listTemplates
+      summary: 评分点模板列表
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: course
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 模板列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TemplateList"
+        "400":
+          description: 参数非法
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reports:
+    post:
+      operationId: uploadReport
+      summary: 上传报告
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, template_id]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: docx 或 pdf，不超过 20MB
+                template_id:
+                  type: string
+      responses:
+        "201":
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadedReport"
+        "400":
+          description: 空文件
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: 模板不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: 重复上传
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: 文件超限
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "415":
+          description: 类型不支持
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reports/{report_id}/grading:
+    post:
+      operationId: triggerGrading
+      summary: 触发评阅
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: 已接受
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradingAccepted"
+        "404":
+          description: 报告不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: 重复提交
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reports/{report_id}/result:
+    get:
+      operationId: getResult
+      summary: 查询评阅结果
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 当前状态与结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradingResult"
+        "404":
+          description: 报告不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/reports/{report_id}/text:
+    get:
+      operationId: getReportText
+      summary: 报告解析后的正文与段落坐标
+      description: 结果页把 evidence 定位到原文段落并高亮。报告尚未解析完成时返回 HTTP 200 与业务码 4090。
+      parameters:
+        - name: report_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 正文与段落坐标；若尚未解析完成则返回业务错误体（code 4090）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ReportText"
+                  - $ref: "#/components/schemas/Error"
+        "404":
+          description: 报告不存在
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/grades:
+    get:
+      operationId: listGrades
+      summary: 成绩列表
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: template_id
+          in: query
+          schema:
+            type: string
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [total_score_desc, total_score_asc]
+            default: total_score_desc
+      responses:
+        "200":
+          description: 成绩列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GradeList"
+        "400":
+          description: 参数非法
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        detail:
+          type: object
+          nullable: true
+    TemplateItem:
+      type: object
+      required: [item_id, name, max_score]
+      properties:
+        item_id:
+          type: integer
+        name:
+          type: string
+        max_score:
+          type: integer
+    Template:
+      type: object
+      required: [template_id, name, course, items, total_score, created_at]
+      properties:
+        template_id:
+          type: string
+        name:
+          type: string
+        course:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateItem"
+        total_score:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+    TemplateList:
+      type: object
+      required: [total, page, page_size, items]
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Template"
+    UploadedReport:
+      type: object
+      required: [report_id, template_id, filename, file_sha256, status, uploaded_at]
+      properties:
+        report_id:
+          type: string
+        template_id:
+          type: string
+        filename:
+          type: string
+        file_sha256:
+          type: string
+        status:
+          type: string
+          enum: [uploaded]
+        uploaded_at:
+          type: string
+          format: date-time
+    GradingAccepted:
+      type: object
+      required: [report_id, status, attempt_no, accepted_at]
+      properties:
+        report_id:
+          type: string
+        status:
+          type: string
+          enum: [parsing, parsed, grading]
+        attempt_no:
+          type: integer
+        accepted_at:
+          type: string
+          format: date-time
+    GradingItem:
+      type: object
+      required: [item_id, name, max_score, score, level, evidence, reason, status, confidence, error_code]
+      properties:
+        item_id:
+          type: integer
+        name:
+          type: string
+        max_score:
+          type: integer
+        score:
+          type: number
+          nullable: true
+        level:
+          type: string
+          nullable: true
+          enum: [excellent, good, fair, weak, absent]
+        evidence:
+          type: string
+          nullable: true
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [graded, failed, low_confidence, skipped]
+        confidence:
+          type: string
+          enum: [high, medium, low]
+        error_code:
+          type: integer
+          nullable: true
+    GradingResult:
+      type: object
+      required: [report_id, template_id, filename, student, status, attempt_no, model, total_score, comment, highlights, suggestions, consistency, warnings, error_code, items, grading_started_at, finished_at]
+      properties:
+        report_id:
+          type: string
+        template_id:
+          type: string
+        filename:
+          type: string
+        student:
+          type: string
+          nullable: true
+          description: 提交人显示名，后端取上传文件名去扩展名作为初值
+        status:
+          type: string
+          enum: [uploaded, parsing, parsed, grading, success, partial_success, failed]
+        attempt_no:
+          type: integer
+        model:
+          type: string
+        total_score:
+          type: number
+          nullable: true
+        comment:
+          type: string
+          nullable: true
+          description: 总评，中文一段 80 到 150 字
+        highlights:
+          type: array
+          items:
+            type: string
+          description: 亮点，0 到 4 条
+        suggestions:
+          type: array
+          items:
+            type: string
+          description: 改进建议，0 到 4 条
+        consistency:
+          type: number
+          nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+        error_code:
+          type: integer
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradingItem"
+        grading_started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+    Paragraph:
+      type: object
+      required: [start, end, text]
+      properties:
+        start:
+          type: integer
+          description: 该段在 text 中的起始字符偏移，从 0 起，左闭
+        end:
+          type: integer
+          description: 结束字符偏移，右开
+        text:
+          type: string
+          description: 该段原文，满足 text[start:end] 与该段 text 逐字相等
+    ReportText:
+      type: object
+      required: [report_id, filename, text, paragraphs]
+      properties:
+        report_id:
+          type: string
+        filename:
+          type: string
+        text:
+          type: string
+          description: 解析后的完整正文，与评分时送入模型的正文一致
+        paragraphs:
+          type: array
+          items:
+            $ref: "#/components/schemas/Paragraph"
+    GradeListItem:
+      type: object
+      required: [report_id, filename, student, template_id, template_name, status, total_score, finished_at]
+      properties:
+        report_id:
+          type: string
+        filename:
+          type: string
+        student:
+          type: string
+          nullable: true
+        template_id:
+          type: string
+        template_name:
+          type: string
+        status:
+          type: string
+          enum: [success, partial_success]
+        total_score:
+          type: number
+        finished_at:
+          type: string
+          format: date-time
+    GradeList:
+      type: object
+      required: [total, page, page_size, items]
+      properties:
+        total:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradeListItem"
