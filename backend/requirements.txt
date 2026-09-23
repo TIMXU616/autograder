@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-docx
+pdfplumber
+python-dotenv
+httpx
+pytest
+fpdf2
+python-multipart
