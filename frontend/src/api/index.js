@@ -19,9 +19,12 @@ import {
 
    USE_MOCK = true 时，Mock 返回的也是「契约形状」，走同一条适配路径，
    因此联调当天只需要把下面这一个开关改成 false。
+
+   2026-09-22 联调：后端 backend/ 已按契约 v1 落地，本开关已置为 false。
+   想回到纯前端 Mock（后端没起时看页面）把它改回 true 即可。
    ============================================================================ */
 
-const USE_MOCK = true
+const USE_MOCK = false
 
 /* 契约 7.x 的接口前缀 */
 const PREFIX = '/api/v1'
@@ -217,6 +220,15 @@ function adaptResult(r, templateMap) {
   const totalScore = r.total_score ?? 0
   const derived = deriveSummary(items, totalScore, fullScore)
 
+  /* 总评三件套的取值策略：整组同源。
+     联调实测后端可能只给 comment、而 highlights / suggestions 返回空数组。
+     若逐字段回落，会出现「评语来自模型、亮点来自前端推导，却统一标注
+     summary_source:'model'」的错标。规则：三者任意非空 → 整组用后端值
+     （空的板块如实显示「暂无」）；三者全空 → 整组用确定性汇总并标注 derived。 */
+  const hasBackendSummary =
+    Boolean(r.comment) || Boolean(r.highlights?.length) || Boolean(r.suggestions?.length)
+  const useDerivedSummary = !hasBackendSummary
+
   return {
     report_id: r.report_id,
     file_name: r.filename,
@@ -231,10 +243,10 @@ function adaptResult(r, templateMap) {
     total_score: totalScore,
     full_score: fullScore,
     score_rate: fullScore ? Math.round((totalScore / fullScore) * 100) : 0,
-    comment: r.comment ?? derived.comment,
-    highlights: r.highlights ?? derived.highlights,
-    suggestions: r.suggestions ?? derived.suggestions,
-    summary_source: r.comment ? 'model' : 'derived',
+    comment: useDerivedSummary ? derived.comment : r.comment,
+    highlights: useDerivedSummary ? derived.highlights : (r.highlights ?? []),
+    suggestions: useDerivedSummary ? derived.suggestions : (r.suggestions ?? []),
+    summary_source: useDerivedSummary ? 'derived' : 'model',
     warnings: r.warnings ?? [],
     consistency: r.consistency ?? null,
     error_code: r.error_code ?? null,
@@ -252,7 +264,9 @@ function adaptGradeRow(row, templateMap) {
   return {
     report_id: row.report_id,
     file_name: row.filename,
-    student: studentFromFilename(row.filename),
+    /* 后端给了 student 就用后端的（契约 v1 未定义该字段，属增补项，
+       部分构建返回 null），没有才按文件名兜底 —— 与 adaptResult 的口径保持一致 */
+    student: row.student || studentFromFilename(row.filename),
     template_id: row.template_id,
     template_name: row.template_name,
     status: row.status,
@@ -280,8 +294,25 @@ export async function fetchTemplates({ page = 1, page_size = 50, course = '' } =
   }
 }
 
+/* 幂等命中时按文件名反查 report_id。
+   契约 4091 的标准响应体是 {"code":4091,"detail":{"report_id":"..."}}，
+   但实测部分构建（如公网实例）的 detail 为 null；此时退化为在成绩列表里
+   按文件名找 —— keyword 是契约增补参数（B2），已实测生效。
+   找不到就返回 null，由调用方抛出可读提示，而不是把 4091 原样透给用户。 */
+async function findReportIdByName(filename) {
+  try {
+    const res = await http.get('/grades', {
+      params: { page: 1, page_size: 50, keyword: filename }
+    })
+    return (res.items ?? []).find((row) => row.filename === filename)?.report_id ?? null
+  } catch {
+    return null
+  }
+}
+
 /* ① 上传报告：只落库，不触发解析（契约 7.2，成功 201）
-   幂等冲突（4091）表示同一文件已上传过，直接复用已有 report_id 继续流程 */
+   幂等冲突（4091）表示同一文件已上传过：复用已有 report_id 继续走触发流程，
+   对用户表现为"该报告已存在，正在打开已有评阅结果"，不当作错误。 */
 export async function uploadReport({ file, templateId }) {
   if (USE_MOCK) {
     const res = mockUpload({ filename: file.name, template_id: templateId })
@@ -293,10 +324,10 @@ export async function uploadReport({ file, templateId }) {
   try {
     return await http.post('/reports', form, { headers: { 'Content-Type': 'multipart/form-data' } })
   } catch (error) {
-    if (error.code === 4091 && error.detail?.report_id) {
-      return { report_id: error.detail.report_id, status: 'uploaded', reused: true }
-    }
-    throw error
+    if (error.code !== 4091) throw error
+    const existing = error.detail?.report_id ?? (await findReportIdByName(file.name))
+    if (existing) return { report_id: existing, status: 'uploaded', reused: true }
+    throw fail(4091, '该报告已存在，请到「成绩列表」查看已有评阅结果')
   }
 }
 

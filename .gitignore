@@ -13,11 +13,14 @@ env/
 .pytest_cache/
 
 # 数据库与数据文件
+# 注意：带 "/" 的 pattern 是相对 .gitignore 所在层级的，所以下面三条必须加 ** 前缀。
+# 否则 backend/data/uploads/ 会漏网 —— 学员上传的实验报告会被提交进仓库。
 *.db
 *.sqlite
 *.sqlite3
-data/uploads/
-data/reports/
+**/data/uploads/
+**/data/_trash/
+**/data/reports/
 
 # 环境变量与密钥（严禁入库）
 .env

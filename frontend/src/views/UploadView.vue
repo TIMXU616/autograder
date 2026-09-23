@@ -107,8 +107,9 @@ const stageText = ref('')
 const MAX_SIZE = 20 * 1024 * 1024
 const ALLOW_EXT = ['docx', 'pdf']
 
-/* 契约没有 progress 字段，进度按状态机的阶段换算（契约第 3 节） */
-const STAGE_PERCENT = { uploaded: 20, parsing: 45, parsed: 65, grading: 88 }
+/* 契约没有 progress 字段，进度按状态机的阶段换算（契约第 3 节）。
+   百分比口径与页面文案已与 A / LearnBuddy 对齐：30 / 50 / 65 / 85 → 终态 100 */
+const STAGE_PERCENT = { uploaded: 30, parsing: 50, parsed: 65, grading: 85 }
 
 const currentTemplate = computed(
   () => templates.value.find((item) => item.template_id === templateId.value) || null
@@ -181,14 +182,17 @@ async function handleSubmit() {
     const uploaded = await uploadReport({ file: file.value, templateId: templateId.value })
     reportId = uploaded.report_id
 
-    stageText.value = '上传完成，正在启动评阅…'
+    if (uploaded.reused) ElMessage.info('该报告已存在，正在打开已有评阅结果')
+    stageText.value = uploaded.reused ? '该报告已存在，正在打开已有评阅结果…' : '上传完成，正在启动评阅…'
     progress.value = STAGE_PERCENT.uploaded
     await triggerGrading(reportId)
 
     const result = await waitForResult(reportId, {
       onStage: (r) => {
         stageText.value = r.stage_text || '正在评阅…'
-        progress.value = STAGE_PERCENT[r.status] ?? progress.value
+        /* 终态（success / partial_success / failed）统一推到 100%，
+           否则进度条会停在 grading 的 85% 上不动 */
+        progress.value = r.in_flight ? (STAGE_PERCENT[r.status] ?? progress.value) : 100
       },
       interval: 2000
     })
@@ -202,8 +206,14 @@ async function handleSubmit() {
     }
     router.push(`/result/${reportId}`)
   } catch (error) {
-    if (reportId) router.push(`/result/${reportId}`)
-    else ElMessage.error(error.message)
+    /* 已经拿到 report_id 时（上传成功、后续触发/轮询失败）不能静默跳转 ——
+       那会让用户以为一切正常。先把原因说出来，再打开该报告的结果页。 */
+    if (reportId) {
+      ElMessage.warning(`${error.message}（已为你打开该报告的结果页）`)
+      router.push(`/result/${reportId}`)
+    } else {
+      ElMessage.error(error.message)
+    }
   } finally {
     submitting.value = false
     progress.value = 0
