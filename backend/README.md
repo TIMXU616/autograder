@@ -36,11 +36,10 @@ backend/
 │   ├── constants.py                  # 错误码常量 + 业务码→HTTP 映射
 │   ├── errors.py                     # GradingError
 │   ├── routes/                       # ① 路由层：只声明路径、参数、状态码
-│   │   ├── reports.py                #   POST /reports · POST /reports/{id}/grading · GET /reports/{id}/result
+│   │   ├── reports.py                #   POST /reports · POST /reports/{id}/grading · GET /reports/{id}/result · GET /reports/{id}/text
 │   │   ├── templates.py              #   GET /templates
 │   │   ├── grades.py                 #   GET /grades
-│   │   ├── health.py                 #   GET /healthz
-│   │   └── stub_data.py              #   占位数据（未挂载）
+│   │   └── health.py                 #   GET /healthz
 │   ├── controllers/
 │   │   └── grading_controller.py     # ② 编排层：上传落盘（backend/uploads/）+ 触发评阅
 │   ├── services/                     # ③ 业务层
