@@ -39,9 +39,10 @@ def main():
     print("items:")
     for it in result["items"]:
         ev = (it.get("evidence") or "")[:30]
+        rs = (it.get("reason") or "")[:30]
         print(
             f"  item {it['item_id']}: score={it['score']}, level={it['level']}, "
-            f"evidence={ev}, status={it['status']}"
+            f"evidence={ev}, status={it['status']}, reason={rs}"
         )
 
 

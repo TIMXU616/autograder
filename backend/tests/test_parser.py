@@ -84,3 +84,23 @@ def test_parse_docx_no_text(tmp_path):
         parse_file(str(p))
     assert e.value.code == 4003
     assert "docx" in e.value.message and "PDF" not in e.value.message
+
+
+def test_paragraphs_coordinates_self_consistent(tmp_path):
+    """段落坐标自洽：逐段 text[start:end] 相等、相邻段间隔为分隔符、末段 end == len(text)。"""
+    p = tmp_path / "a.docx"
+    doc = Document()
+    doc.add_paragraph("第一段：掌握单链表的存储结构与基本操作")
+    doc.add_paragraph("第二段：理解指针在动态内存分配中的作用")
+    doc.add_paragraph("第三段：学会用单链表解决顺序存储插入删除不便的问题")
+    doc.save(str(p))
+    r = parse_file(str(p))
+    text = r["text"]
+    paras = r["paragraphs"]
+
+    assert len(paras) == 3
+    for para in paras:
+        assert text[para["start"]:para["end"]] == para["text"]
+    for i in range(len(paras) - 1):
+        assert paras[i]["end"] + 1 == paras[i + 1]["start"]  # 中间的正是分隔符
+    assert paras[-1]["end"] == len(text)

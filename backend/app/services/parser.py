@@ -61,6 +61,7 @@ def _parse_docx(p: Path) -> dict:
         "text": text,
         "char_count": len(text),
         "source_type": "docx",
+        "paragraphs": _build_paragraphs(parts),
         "warnings": [],
     }
 
@@ -83,5 +84,21 @@ def _parse_pdf(p: Path) -> dict:
         "text": text,
         "char_count": len(text),
         "source_type": "pdf",
+        "paragraphs": _build_paragraphs(pages),
         "warnings": [],
     }
+
+
+def _build_paragraphs(parts) -> list:
+    """按 "\n" 拼接后的字符区间。分隔符不属于任何段落，故第 i 段 end + 1 = 第 i+1 段 start。
+
+    硬约束：对每一段都成立 text[start:end] == 该段 text。
+    """
+    paragraphs = []
+    offset = 0
+    for part in parts:
+        start = offset
+        end = start + len(part)
+        paragraphs.append({"start": start, "end": end, "text": part})
+        offset = end + 1  # +1 是拼接用的换行分隔符，不属于任何段落
+    return paragraphs

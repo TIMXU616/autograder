@@ -78,6 +78,14 @@ class ReportNotFoundError(GradingError):
         super().__init__(4042, message)
 
 
+class NotParsedError(GradingError):
+    """报告尚未解析完成。HTTP 200，前端据此提示稍候，不得当作 404。"""
+
+    def __init__(self, status="parsing"):
+        super().__init__(4090, "报告尚未解析完成", http_status=200)
+        self.detail = {"status": status}
+
+
 class DuplicateReportError(GradingError):
     def __init__(self, message="该报告已存在"):
         super().__init__(4091, message)

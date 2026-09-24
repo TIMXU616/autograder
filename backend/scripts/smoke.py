@@ -86,6 +86,23 @@ def main():
     print(f"[5] GET /api/v1/grades -> {r.status_code}, total={grades.get('total')}")
     ok = ok and r.status_code == 200
 
+    # 6 原文段落：断言段落坐标自洽
+    r = client.get(f"/api/v1/reports/{rid}/text")
+    txt = r.json() if r.status_code == 200 else {}
+    text = txt.get("text") or ""
+    paras = txt.get("paragraphs") or []
+    consistent = bool(paras)
+    for p in paras:
+        if text[p["start"]:p["end"]] != p["text"]:
+            consistent = False
+    if paras:
+        consistent = consistent and paras[-1]["end"] == len(text)
+    print(
+        f"[6] GET /api/v1/reports/{rid}/text -> {r.status_code}, 段数={len(paras)}, "
+        f"正文长度={len(text)}, 段落自洽={consistent}"
+    )
+    ok = ok and r.status_code == 200 and consistent
+
     print("PASS" if ok else "FAIL")
     sys.exit(0 if ok else 1)
 

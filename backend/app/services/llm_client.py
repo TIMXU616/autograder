@@ -23,6 +23,12 @@ _call_semaphore = threading.Semaphore(1)
 
 _CREDITS_CODE = 1113  # 智谱额度不足原始码，见 docs/平台能力清单.md
 
+# mock 模式自曝标识（P2-09）：演示若走 mock，任何拿到结果的人都要能一眼看出不是真评分
+MOCK_REASON_PREFIX = "[模拟]"
+MOCK_REASON_TEXT = "[模拟] 未调用模型，分数为占位值"
+MOCK_WARNING = "模拟评分：未配置模型密钥，未调用 glm-4.7"
+MOCK_COMMENT = "当前为模拟评分（未配置模型密钥），结果仅供联调，不代表真实评阅结论。"
+
 
 class LLMClient:
     def __init__(self, api_key=None, base_url=None, model=None):
@@ -125,7 +131,7 @@ def _mock_chat(user: str) -> str:
                 "score": round(it["max_score"] * 0.8, 1),
                 "level": "good",
                 "evidence": first_line[:50] if first_line else None,
-                "reason": "mock 评分（未配置 GLM_API_KEY）",
+                "reason": MOCK_REASON_TEXT,
                 "status": "graded",
                 "confidence": "medium",
                 "error_code": None,
@@ -136,14 +142,10 @@ def _mock_chat(user: str) -> str:
         {
             "items": items,
             "total_score": total,
-            "comment": (
-                "本报告为骨架阶段占位评分（未配置 GLM_API_KEY）。整体来看报告结构完整度中等，"
-                "各评分项按模板判据逐条核对后给出占位分数，主要优点是章节覆盖较全，"
-                "主要问题是缺少真实模型对语义质量的判断。填入密钥后将自动切换为真实评分。"
-            ),
+            "comment": MOCK_COMMENT,
             "highlights": [],
             "suggestions": [],
-            "warnings": [],
+            "warnings": [MOCK_WARNING],
         },
         ensure_ascii=False,
     )

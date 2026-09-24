@@ -171,3 +171,21 @@ def test_code_only_not_offtopic():
     result = grader.grade_report(TEMPLATE, code_report, llm_client=client)
     assert result["total_score"] == 8.0  # 未被清零
     assert not any("报告内容与数据结构实验无关" in w for w in result["warnings"])
+
+
+def test_mock_mode_self_exposes():
+    """mock 模式必须自曝：[模拟] 前缀、固定警示串只出现一次、comment 含模拟字样。"""
+    from app.services.llm_client import (
+        LLMClient,
+        MOCK_REASON_PREFIX,
+        MOCK_WARNING,
+    )
+
+    client = LLMClient(api_key="")  # 空 key 强制走 mock
+    assert client.is_mock
+
+    result = grader.grade_report(TEMPLATE, REPORT, llm_client=client)
+    for it in result["items"]:
+        assert str(it["reason"]).startswith(MOCK_REASON_PREFIX)
+    assert result["warnings"].count(MOCK_WARNING) == 1
+    assert "模拟" in (result["comment"] or "")
