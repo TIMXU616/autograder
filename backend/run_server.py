@@ -31,7 +31,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 from app.main import app  # noqa: E402  导入即完成 init_db() 与启动恢复
 from app.repositories import grading_repo  # noqa: E402
 
-TEMPLATE_PATH = PROJECT_ROOT / "templates" / "grading" / "数据结构实验报告.json"
+TEMPLATE_DIR = PROJECT_ROOT / "templates" / "grading"
 
 # 前端构建产物的候选位置。`dist` 是 vite 默认输出，但发布平台会排除
 # node_modules/.git/build output 之类的目录，所以留一个改名后的落点。
@@ -43,23 +43,29 @@ DIST_CANDIDATES = (
 
 
 def seed_templates() -> None:
-    """把评分点模板导进库。幂等：已存在则跳过（insert_template 返回 False）。"""
-    if not TEMPLATE_PATH.exists():
-        print(f"[seed] 跳过：模板文件不存在 {TEMPLATE_PATH}", flush=True)
+    """把 templates/grading/*.json 逐个导进库。幂等：已存在则跳过。
+
+    与 scripts/seed.py 规则一致：单文件出错只打印该文件错误，不中断其余文件。
+    """
+    files = sorted(TEMPLATE_DIR.glob("*.json"))
+    if not files:
+        print(f"[seed] 跳过：目录下没有 *.json 模板文件 {TEMPLATE_DIR}", flush=True)
         return
-    try:
-        data = json.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
-        inserted = grading_repo.insert_template(
-            template_id=data["template_id"],
-            name=data["name"],
-            course=data["course"],
-            total_score=data["total_score"],
-            items=data["items"],
-        )
-    except Exception as exc:  # 播种失败必须吼出来，否则表现成「上传一律 4041」
-        print(f"[seed] 失败：{type(exc).__name__}: {exc}", flush=True)
-        raise
-    print("[seed] 已插入模板" if inserted else "[seed] 模板已存在，跳过", flush=True)
+    for path in files:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            inserted = grading_repo.insert_template(
+                template_id=data["template_id"],
+                name=data["name"],
+                course=data["course"],
+                total_score=data["total_score"],
+                items=data["items"],
+                domain_terms=data.get("domain_terms"),
+            )
+            flag = "已插入模板" if inserted else "模板已存在，跳过"
+            print(f"[seed] {flag}: {path.name} ({data['template_id']})", flush=True)
+        except Exception as exc:  # 播种失败必须吼出来，否则表现成「上传一律 4041」
+            print(f"[seed] 导入失败，已跳过 {path.name}：{type(exc).__name__}: {exc}", flush=True)
 
 
 def mount_frontend() -> None:

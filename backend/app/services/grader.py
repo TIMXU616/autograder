@@ -28,21 +28,37 @@ DOMAIN_TERMS_EN = (
 )
 
 
-def _has_domain_terms(report_text: str) -> bool:
-    """正文里出现任一数据结构术语即认为与课程相关。"""
-    if any(t in report_text for t in DOMAIN_TERMS_CN):
+def _has_domain_terms(report_text: str, terms=None) -> bool:
+    """正文里出现任一课程领域术语即认为与课程相关。
+
+    terms 为模板自带的 domain_terms（{"cn": [...], "en": [...]}）；
+    模板没给该字段时回退内置数据结构表，保证 tpl-1001 行为不变。
+    """
+    cn = (terms or {}).get("cn") or DOMAIN_TERMS_CN
+    en = (terms or {}).get("en") or DOMAIN_TERMS_EN
+    if any(t in report_text for t in cn):
         return True
     lower = report_text.lower()
-    return any(t in lower for t in DOMAIN_TERMS_EN)
+    return any(t in lower for t in en)
 
 
-def _is_offtopic(report_text: str, warnings: list):
+def _is_offtopic(report_text: str, warnings: list, terms=None):
     """两级判据。返回 (是否跑题, 命中原因)。主判据确定性，不依赖模型措辞。"""
-    if not _has_domain_terms(report_text):
-        return True, "正文不含任何数据结构术语"
+    if not _has_domain_terms(report_text, terms):
+        return True, "正文不含任何课程领域术语"
     if any(k in w for w in warnings for k in OFFTOPIC_KEYWORDS):
         return True, "warnings 命中跑题关键词"
     return False, None
+
+
+OFFTOPIC_FIXED_WARNING = "报告内容与数据结构实验无关"  # 契约固定串（course 为数据结构时即为此串）
+
+
+def _offtopic_warning(course=None) -> str:
+    """跑题固定警示串按模板课程生成；无 course 时回退契约固定串，保证 tpl-1001 行为不变。"""
+    if course:
+        return f"报告内容与{course}实验无关"
+    return OFFTOPIC_FIXED_WARNING
 
 
 def grade_report(template: dict, report_text: str, prompt_path=None, llm_client=None) -> dict:
@@ -77,7 +93,9 @@ def grade_report(template: dict, report_text: str, prompt_path=None, llm_client=
         if data is None:
             raise InvalidJsonError()
 
-    return _normalize(data, report_text)
+    return _normalize(
+        data, report_text, template.get("domain_terms"), template.get("course")
+    )
 
 
 def _parse_json(raw: str):
@@ -90,7 +108,7 @@ def _parse_json(raw: str):
         return None
 
 
-def _normalize(data: dict, report_text: str) -> dict:
+def _normalize(data: dict, report_text: str, domain_terms=None, course=None) -> dict:
     items = data.get("items", [])
     warnings = list(data.get("warnings", []) or [])
     comment = data.get("comment") or ""
@@ -119,7 +137,7 @@ def _normalize(data: dict, report_text: str) -> dict:
             warnings.append(f"第 {item.get('item_id')} 项依据未能在原文中定位")
 
     # 跑题兜底：主判据看正文术语（确定性，不依赖模型措辞），次判据看模型 warnings，任一命中即清零
-    offtopic_hit, offtopic_reason = _is_offtopic(report_text, warnings)
+    offtopic_hit, offtopic_reason = _is_offtopic(report_text, warnings, domain_terms)
     if offtopic_hit:
         for item in items:
             item["score"] = 0.0
@@ -127,8 +145,9 @@ def _normalize(data: dict, report_text: str) -> dict:
             item["status"] = "graded"
             item["confidence"] = "high"
             item["evidence"] = None
-        if "报告内容与数据结构实验无关" not in warnings:
-            warnings.append("报告内容与数据结构实验无关")
+        warn = _offtopic_warning(course)
+        if warn not in warnings:
+            warnings.append(warn)
         logger.warning("跑题兜底触发（%s），全部评分项已强制清零", offtopic_reason)
 
     # total_score 与各项之和不等，以各项之和为准重算

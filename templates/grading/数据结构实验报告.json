@@ -3,6 +3,10 @@
   "name": "数据结构实验报告评分模板",
   "course": "数据结构",
   "total_score": 100,
+  "domain_terms": {
+    "cn": ["链表", "线性表", "顺序表", "数组", "栈", "队列", "树", "二叉树", "图", "邻接", "排序", "查找", "哈希", "散列", "堆", "递归", "迭代", "指针", "节点", "结点", "遍历", "插入", "删除", "时间复杂度", "空间复杂度", "算法", "数据结构", "实验报告"],
+    "en": ["linked", "list", "stack", "queue", "tree", "graph", "sort", "search", "hash", "heap", "insert", "delete", "traverse", "node", "pointer", "o("]
+  },
   "items": [
     {
       "item_id": 1,
@@ -116,5 +120,14 @@
       "question": "报告是否具备标题与不少于 3 处章节编号，且出现至少 1 个图表？",
       "pitfall": "仅因无图表就判低分；以能否清晰定位各章节为准，图表是加分项而非一票否决。"
     }
+  ],
+  "level_rule": "每个评分项的判定标准由若干条可计数判据组成，判据命中几条决定落哪一档。判据是档位的下限锚点，不是分数的唯一来源——落档之后，档位内的具体得分由语义质量在区间内确定。例如命中 2 条判据落入 fair（得分率 0.50 至 0.69），内容确实讲对了取区间上端，讲得含糊取区间下端。判据全中但内容自相矛盾、明显编造的，下调一档并在 reason 里写明原因。与接口 level 的对应关系见下表。",
+  "guards": [
+    "1. 分项得分之和与总分不一致：以各项 score 之和为准重新计算 total_score 并覆盖，禁止保留不一致值。若某项 score 为 null（failed），该项按 0 计入求和。",
+    "2. 报告跑题（内容与数据结构实验无关）：各评分项 score 置 0、level 置 absent、status 置 graded、confidence 置 high，reason 写明「报告内容与数据结构实验无关」；整体 status 保持 success，total_score = 0，warnings 的第一条必须是固定串「报告内容与数据结构实验无关」，不得换词。注意：absent 是 level 取值，不是 status 取值。comment 写明「报告内容与数据结构实验无关」，highlights 为空数组，suggestions 给 1 条「按数据结构实验要求重写报告」。",
+    "3. 只有代码、没有正文说明：第 4 项（代码实现）正常判分；第 1、3、6 项（目的与原理、算法设计、结果与分析）必须判不达标或完全缺失；第 2、5、7 项按实际有无对应内容判。",
+    "4. 解析正文不足 200 字：不中断流程，正常逐项评分，total_score 照实计算，warnings 追加「报告正文仅 N 字，不足 200 字，评分可信度低」。",
+    "5. 模型给出的 evidence 在原文中找不到：该项 status 置 low_confidence、confidence 置 low、error_code 保持 null，保留原得分，warnings 追加「第 N 项依据未能在原文中定位」。不得因此判 failed，也不得使用 5003——5003 专指模型返回非法 JSON。若其余项至少一项 graded，整体 status = partial_success。",
+    "6. 某个评分项模型调用失败：该评分项 status 置 failed、score 置 null、error_code 置 5002；其余项正常；若至少一项 graded，整体 status = partial_success；若全部项失败，整体 status = failed。comment 里注明「第 N 项评分失败，总评不含该项」。"
   ]
 }

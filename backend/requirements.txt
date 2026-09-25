@@ -1,17 +1,9 @@
-# 依赖清单（B 于 2026-09-23 合并两份来源，取并集；同名包取较新的版本下限）
-#   来源① A 的四层版（a/backend-p2）
-#   来源② B 的扁平版（已移至仓库外备份，见 docs/ 对应说明）
-# 原则：任何一份里有、另一份没有的包，都必须保留 —— 漏一个包服务就起不来。
-
-fastapi>=0.110
-uvicorn[standard]>=0.27
-python-multipart>=0.0.9
-pydantic>=2.5
-python-docx>=1.1.0
-pdfplumber>=0.11.0
-httpx>=0.27
-python-dotenv>=1.0
-
-# 测试依赖（pytest 用例与 PDF 样本构造）
-pytest>=8.0
-fpdf2>=2.7
+fastapi
+uvicorn
+python-docx
+pdfplumber
+python-dotenv
+httpx
+pytest
+fpdf2
+python-multipart
