@@ -45,7 +45,9 @@ def get_report(report_id) -> dict:
     return dict(row)
 
 
-def insert_template(template_id, name, course, total_score, items, created_at=None) -> bool:
+def insert_template(
+    template_id, name, course, total_score, items, created_at=None, domain_terms=None
+) -> bool:
     """返回 True 表示新插入，False 表示已存在（幂等跳过）。"""
     created_at = created_at or now_cst()
     conn = get_conn()
@@ -56,9 +58,15 @@ def insert_template(template_id, name, course, total_score, items, created_at=No
         if exists:
             return False
         conn.execute(
-            "INSERT INTO grading_templates (template_id, name, course, total_score, items, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (template_id, name, course, total_score, json.dumps(items, ensure_ascii=False), created_at),
+            "INSERT INTO grading_templates "
+            "(template_id, name, course, total_score, items, domain_terms, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                template_id, name, course, total_score,
+                json.dumps(items, ensure_ascii=False),
+                json.dumps(domain_terms, ensure_ascii=False) if domain_terms else None,
+                created_at,
+            ),
         )
         conn.commit()
         return True
@@ -135,6 +143,7 @@ def list_templates(page=1, page_size=20, course=None) -> dict:
     items = []
     for r in rows:
         d = dict(r)
+        d.pop("domain_terms", None)  # 提示词用字段，不进接口返回
         raw_items = json.loads(d["items"] or "[]")
         d["items"] = [
             {"item_id": it["item_id"], "name": it["name"], "max_score": it["max_score"]}
@@ -165,6 +174,7 @@ def get_template(template_id) -> dict:
         raise TemplateNotFoundError()
     d = dict(row)
     d["items"] = json.loads(d["items"] or "[]")
+    d["domain_terms"] = json.loads(d["domain_terms"]) if d.get("domain_terms") else None
     return d
 
 

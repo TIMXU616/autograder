@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS grading_templates (
     course TEXT NOT NULL,
     total_score INTEGER NOT NULL,
     items TEXT NOT NULL,
+    domain_terms TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -72,6 +73,11 @@ def init_db() -> None:
                 conn.execute(f"ALTER TABLE reports ADD COLUMN {col} TEXT")
             except sqlite3.OperationalError:
                 pass  # 列已存在，跳过
+        # 兼容已存在的旧表：grading_templates 补 domain_terms 列
+        try:
+            conn.execute("ALTER TABLE grading_templates ADD COLUMN domain_terms TEXT")
+        except sqlite3.OperationalError:
+            pass  # 列已存在，跳过
         conn.commit()
     finally:
         conn.close()
